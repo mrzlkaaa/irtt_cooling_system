@@ -13,21 +13,18 @@ def test_read_csv(Refactorer):
     assert 0
 
 def test_select_by_ids(Refactorer):
-    series = Refactorer.select_by_ids(*IDs)
+    series = Refactorer.select_by_ids(IDs)
     print(series)
     assert 0
 
 def test_min_frac_groupby(Refactorer):
-    series = Refactorer.select_by_ids(*IDs)
-    frac_series = Refactorer.min_frac_groupby("5", *series)
+    series = Refactorer.select_by_ids(IDs)
+    frac_series = Refactorer.min_frac_groupby(5, *series)
     print(frac_series)
-    print(type(frac_series[0]))
-    #* lens check
-    # Refactorer.series_len_check(frac_series)
     assert 0
 
 def test_select_time_period(Refactorer):
-    series = Refactorer.select_by_ids(*IDs)
+    series = Refactorer.select_by_ids(IDs)
     frac_series = Refactorer.min_frac_groupby("5", *series)
     ids_period = dict()
     for i in frac_series:
@@ -36,13 +33,13 @@ def test_select_time_period(Refactorer):
     assert 0
 
 def test_create_df_from_dfs(Refactorer):
-    series = Refactorer.select_by_ids(*IDs)
+    series = Refactorer.select_by_ids(IDs)
     frac_series = Refactorer.min_frac_groupby("5", *series)
     Refactorer.create_df_from_dfs("ID", frac_series)
     assert 0
 
 def test_export_df(Refactorer):
-    series = Refactorer.select_by_ids(*IDs)
+    series = Refactorer.select_by_ids(IDs)
     frac_series = Refactorer.min_frac_groupby("5", *series)
     df = Refactorer.create_df_from_dfs("ID", frac_series)
     Refactorer.export_df(df)
