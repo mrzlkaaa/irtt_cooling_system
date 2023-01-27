@@ -1,5 +1,8 @@
 import pytest
-from .preprocessing import path, CsvRefactorer
+
+
+
+from preprocessing import path, CsvRefactorer
 
 IDs = [481, 309, 317, 319]
 
@@ -9,7 +12,7 @@ def Refactorer():
     return CsvRefactorer.read_csv(path)
 
 def test_read_csv(Refactorer):
-    print(Refactorer.csv)
+    print(Refactorer.df)
     assert 0
 
 def test_select_by_ids(Refactorer):

@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 
-path = os.path.join(os.path.split(os.path.dirname(__file__))[0], "041022_to_231222.csv")
+path = os.path.join(os.path.split(os.path.dirname(__file__))[0], "jupyter", "041022_to_231222.csv")
 
 class CsvRefactorer:
     """ Class purpose is to refactor input csv with given columns
