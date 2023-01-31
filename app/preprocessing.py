@@ -27,17 +27,26 @@ class CsvRefactorer:
 
     @staticmethod
     def select_time_period(df, periods):
+        """
+        takes  DataFrame and TimeStamps 
+        of certain period (started and finished)
+        iterate over given periods (array) and select rows via .loc
+        creates dictionary where the key is 
+        time period <started finished> (blank is delimeter)
+        """
         selected_periods: dict = dict()
         for period in periods:
             s,f = period
             selected_periods[f"{s} {f}"] = df.loc[s:f].dropna()
         return selected_periods
 
-    #* drops nan and all quality's except 1
-    #* drops rows with value == 0.0
-    #* converts obj to datetime format
-    #* sets timestamp as an index
     def quick_clean(self) -> pd.core.frame.DataFrame:
+        """
+        drops nan and all quality's except 1
+        drops rows with value == 0.0
+        converts obj to datetime format
+        sets timestamp as an index
+        """
         df: pd.core.frame.DataFrame = self.df.dropna()
         df = df[(df["Quality"] == 1) & (df["Value"] != 0.0)] \
             .reset_index().drop(["index", "Quality"], axis=1)
@@ -73,7 +82,12 @@ class CsvRefactorer:
             raise ValueError("selected ids have different lenghts")
 
     #* accepts dfs for futher creation of new df
-    def create_df_from_dfs(self, param, dfs) -> pd.core.frame.DataFrame:
+    def create_df_from_dfs(self, param: str, dfs: list) -> pd.core.frame.DataFrame:
+        """
+        Create DataFrame  with following structure < Time ID1 val ID2 val ... IDn val >
+        param is parameter value which will be used as column in output DataFrame 
+        param is ID by default here
+        """
         cols_value = dict()
         index = dfs[0].index
         for df in dfs:
