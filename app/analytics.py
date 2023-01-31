@@ -33,6 +33,7 @@ class Analytics(ABC):
     def df_md_filter(self, df: pd.core.frame.DataFrame, 
             col_name: Union[int, str]) -> Tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
         """ filter df by mean deviation limit
+            col_name denotes the column to filter whole df
             returns 2 dfs: ones that are True and False
         """
         if self.mean_deviation_lim is None:
@@ -54,5 +55,5 @@ class WaterFlowRates(Analytics):
 
 
 class PumpsCurrents(Analytics):
-    def __init__(self):
-        return
+    def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
+        super().__init__(mean_deviation_lim)

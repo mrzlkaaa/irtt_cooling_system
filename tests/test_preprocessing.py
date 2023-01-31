@@ -11,8 +11,17 @@ def Refactorer():
     # print(path)
     return CsvRefactorer.read_csv(path)
 
-def test_read_csv(Refactorer):
+@pytest.fixture
+def Refactorer_ran_ind():
+    # print(path)
+    return CsvRefactorer.read_csv(path, quickclean=True, index_range = ("20221017", "20221021"))
+
+def test_read_df(Refactorer):
     print(Refactorer.df)
+    assert 0
+
+def test_read_df_ran_ind(Refactorer_ran_ind):
+    print(Refactorer_ran_ind.df)
     assert 0
 
 def test_select_by_ids(Refactorer):
@@ -46,3 +55,7 @@ def test_export_df(Refactorer):
     frac_series = Refactorer.min_frac_groupby("5", *series)
     df = Refactorer.create_df_from_dfs("ID", frac_series)
     Refactorer.export_df(df)
+
+def test_drop_if_below(Refactorer):
+    print(Refactorer.drop_if_below([Refactorer.df], "ID", 30.0))
+    assert 0
