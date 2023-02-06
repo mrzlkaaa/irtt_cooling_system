@@ -51,6 +51,10 @@ class CsvRefactorer:
         return df
 
     def select_by_ids(self, ids: List[int]) -> List[pd.core.frame.DataFrame]:
+        """
+        *selects rows with a given id
+        *creates a list of dfs where each dataframe consist only 1 queried id
+        """
         if not isinstance(ids, list):
             ids = list(ids)
         if len(ids) == 0:
@@ -62,6 +66,10 @@ class CsvRefactorer:
 
 
     def min_frac_groupby(self, frac: Union[str, int, float] = "5", *dfs: pd.core.frame.DataFrame) -> List[pd.core.frame.DataFrame]:
+        """
+        *groupby given dataframes by given frequancy in unit of minutes
+        *if the output length do not equal for all dfs raise ValueError
+        """
         if isinstance(frac, int) or isinstance(frac, float):
             frac = str(frac) 
         series: List[pd.core.frame.DataFrame] = []
@@ -71,6 +79,12 @@ class CsvRefactorer:
         return series
 
     def series_len_check(self, series: List[pd.core.frame.DataFrame]) -> None:
+        """
+        *accepts series where each df grouped by frequancy
+        *function creates the array of length where each length corresponds with df
+        *after converts array to a set that cause to drop duplitates 
+        *if the length of set is greater 1 raise ValueError (dfs are not equal)
+        """
         lens: List[pd.core.frame.DataFrame] = []
         for i in series:
             lens.append(len(i))
@@ -104,7 +118,7 @@ class CsvRefactorer:
             col_name: Union[str, int, float], 
             value: Union[int, float]) -> pd.core.frame.DataFrame:
         """
-        helper to drop rows that do not satisfy basic logical operation >
+        *helper to drop rows that do not satisfy basic logical operation > (more)
         """
         series: List[pd.core.frame.DataFrame] = []
         for df in dfs:
