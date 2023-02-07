@@ -7,6 +7,7 @@ import os
 
 path = os.path.join(os.path.split(os.path.dirname(__file__))[0], "jupyter", "041022_to_231222.csv")
 
+#! rename to DfRefactorer
 class CsvRefactorer:
     """ 
     * Class purpose is to refactor input csv with given columns
@@ -116,7 +117,7 @@ class CsvRefactorer:
     @staticmethod
     def drop_if_below(dfs: List[pd.core.frame.DataFrame],
             col_name: Union[str, int, float], 
-            value: Union[int, float]) -> pd.core.frame.DataFrame:
+            value: Union[int, float]) -> List[pd.core.frame.DataFrame]:
         """
         *helper to drop rows that do not satisfy basic logical operation > (more)
         """
@@ -139,6 +140,23 @@ class CsvRefactorer:
             s,f = period
             selected_periods[f"{s} {f}"] = df.loc[s:f].dropna()
         return selected_periods
+
+    @staticmethod
+    def dfs_formatting(dfs: List[pd.core.frame.DataFrame], 
+            keys: List[Union[str, int, float]],
+            filter_range: List[Union[str, int, float]]) ->\
+            Dict[str, pd.core.frame.DataFrame]:
+        
+        """
+        * creates dict where key - parameter or name of df,
+        * value - formatted df
+        * value formats by range (index range actually)
+        """
+        store: Dict[Union[str, int, float], 
+            pd.core.frame.DataFrame] = dict()
+        for n, df in enumerate(dfs):
+            store[keys[n]] = df.sort_index().loc[filter_range[0] : filter_range[-1]]
+        return store
 
     @staticmethod
     def export_df(df: pd.core.frame.DataFrame):
