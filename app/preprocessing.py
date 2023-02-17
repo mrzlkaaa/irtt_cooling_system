@@ -1,9 +1,11 @@
 from __future__ import annotations
 from operator import index
 from typing import Dict, List, Tuple, Union, Set
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 import os
+from sklearn.preprocessing import Normalizer, OrdinalEncoder, OneHotEncoder
 
 path = os.path.join(os.path.split(os.path.dirname(__file__))[0], "jupyter", "041022_to_231222.csv")
 
@@ -157,7 +159,68 @@ class CsvRefactorer:
         for n, df in enumerate(dfs):
             store[keys[n]] = df.sort_index().loc[filter_range[0] : filter_range[-1]]
         return store
+        
+    @staticmethod
+    def merge_dfs_by_tp(d: List[Dict[str, pd.core.frame.DataFrame]],
+            time_periods: List[str],
+            index: Union[int, None] = None)\
+            -> Dict[str, List[pd.core.frame.DataFrame]]:
+        """
+        * accepts output of <select_time_period> static method
+        * d is list of dictionaries with keys (time period) and 
+        * values (dataframe for this period)
+        * where each list is dictionary (as many dataframes were
+        * as many dictionaries are) splitted on period of time
+        * given list can be refactored (merged) by period of times only
+        * so the number of dictionaries will be equal to the number of time periods
+        * gives a lot of profit when there are lots of dfs in dictionary with different length
+        * < index > argument is index of dataframe upon which index to filter other dfs
+        """
+        tp_merged = defaultdict(list)
+        #* iterates over the list of dictionaries
+        for dct in d:
+            #* iterates over the keys dictionary
+            for tp in time_periods:
+                #* append only dict with tp
+                if index is not None:
+                    tp_merged[tp].append(dct[tp].filter(items=d[index][tp].index, axis=0)) 
+                else:
+                    tp_merged[tp].append(dct[tp]) 
+        return tp_merged
+
+    @staticmethod
+    def create_df_for_tp(d: Dict[str, List[pd.core.frame.DataFrame]], 
+            time_periods: List[str]) -> Dict[str, pd.core.frame.DataFrame]:
+        """
+        * method aim is to create df by concatenation dfs for given time period
+        * concat dfs along indexes column
+        * fills missing data by zeros
+        """
+        d_by_tp = dict()
+        for tp in time_periods:
+            d_by_tp[tp] = pd.concat([*d[tp]], axis=1).fillna(0.0)
+        return d_by_tp
+
 
     @staticmethod
     def export_df(df: pd.core.frame.DataFrame):
         df.to_csv("123.csv", index=True) #* given name is a test
+
+
+class DataPreprocess:
+    def __init__(self):
+        return
+
+    def trigonometric_transform(self, series, period):
+        return
+
+    @staticmethod
+    def retrieve_datatime(series: pd.core.frame.Series, 
+            attr: str) -> Union[pd.core.frame.Series, None]:
+        """
+        * retrieves required data from Timestamp (datetime obj)
+        * by attribute name
+        * returns new series of required attributes
+        * raise attribute error if there is no given in TimeStamp obj
+        """
+        return series.apply(lambda x: getattr(x, attr))

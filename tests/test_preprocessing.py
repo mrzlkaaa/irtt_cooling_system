@@ -2,7 +2,7 @@ import pytest
 
 
 
-from preprocessing import path, CsvRefactorer
+from preprocessing import path, CsvRefactorer, DataPreprocess
 
 IDs = [481, 309, 317, 319]
 
@@ -59,3 +59,12 @@ def test_export_df(Refactorer):
 def test_drop_if_below(Refactorer):
     print(Refactorer.drop_if_below([Refactorer.df], "ID", 30.0))
     assert 0
+
+
+# @pytest.fixture
+# def DP():
+#     return DataPreprocess()
+
+# def test_get_transformer(DP):
+#     numerical = DP.get_transformer("numerical")
+#     assert numerical.__name__ == "numerical_encode"

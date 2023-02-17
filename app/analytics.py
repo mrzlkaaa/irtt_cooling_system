@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
+from gettext import find
 from typing import List, Tuple, Union
 import numpy as np
 import pandas as pd
 from sklearn import linear_model
+from scipy.signal import find_peaks, peak_widths
 
 
 class Analytics(ABC):
@@ -70,3 +72,16 @@ class DissipatedHeat(Analytics):
 class PumpsCurrents(Analytics):
     def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
         super().__init__(mean_deviation_lim)
+
+
+class FansCurrents(Analytics):
+    def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
+        super().__init__(mean_deviation_lim)
+
+    @staticmethod
+    def detect_nonstationarity(y: pd.core.frame.Series,
+             operation_threshold: Union[float, int]):
+        """
+        * applicable only for data that considers as binary (0 - off, 1 -on)
+        """
+        return
