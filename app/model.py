@@ -11,7 +11,7 @@ class TrainModel:
         self.y = y
 
     def model_comparison(self, model_list: List[str],
-                         models: List[object], cv: object):
+            models: List[object], cv: object) -> None:
         for i in range(len(models)):
             print(f"Evaluating of {model_list[i]}")
             self.cross_validation(models[i], cv)
@@ -21,7 +21,8 @@ class TrainModel:
             model: object,
             cv: object,
             X: Union[np.ndarray, pd.core.frame.DataFrame] = None,
-            y: Union[np.ndarray, pd.core.frame.DataFrame] = None) -> None:
+            y: Union[np.ndarray, pd.core.frame.DataFrame] = None
+            ) -> None:
 
         if X is None or y is None:
             X = self.X
@@ -42,8 +43,13 @@ class TrainModel:
             f"Root Mean Squared Error: {rmse.mean():.3f} +/- {rmse.std():.3f}\n"
         )
 
-    # def train_model(self, model):
-    #     return
+    #?
+    def fit(self, model):
+        return
 
+    #?
+    def predict(self, model):
+        return
+    #?
     def get_score(self):
         return

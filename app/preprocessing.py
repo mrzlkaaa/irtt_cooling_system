@@ -214,11 +214,17 @@ class DataPreprocess:
     def trigonometric_transform(self, series, period):
         return
 
+    def column_transform(self):
+        """
+        #* flexible method to do column transformation
+        """
+        return
+
     @staticmethod
     def retrieve_datatime(series: pd.core.frame.Series, 
             attr: str) -> Union[pd.core.frame.Series, None]:
         """
-        * retrieves required data from Timestamp (datetime obj)
+        * retrieves required data (day, hour and etc.) from Timestamp (datetime obj)
         * by attribute name
         * returns new series of required attributes
         * raise attribute error if there is no given in TimeStamp obj
