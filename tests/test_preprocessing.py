@@ -1,10 +1,16 @@
 import pytest
+import pandas as pd
+import os
 
-
-
-from preprocessing import path, CsvRefactorer, DataPreprocess
+from preprocessing import path, CsvRefactorer, DataPreprocess, PeriodicDataPreprocess
 
 IDs = [481, 309, 317, 319]
+
+df_test = pd.read_csv(
+    os.path.join(
+        os.path.dirname(__file__), "to_test.csv"
+    ),
+    index_col=[0])
 
 @pytest.fixture
 def Refactorer():
@@ -60,11 +66,18 @@ def test_drop_if_below(Refactorer):
     print(Refactorer.drop_if_below([Refactorer.df], "ID", 30.0))
     assert 0
 
+def test_concat_dfs(Refactorer):
+    df = Refactorer.concat_dfs([df_test])
+    print(df)
+    assert 0
 
-# @pytest.fixture
-# def DP():
-#     return DataPreprocess()
 
-# def test_get_transformer(DP):
-#     numerical = DP.get_transformer("numerical")
-#     assert numerical.__name__ == "numerical_encode"
+# path_to_PDP = os.path.join(
+#     os.path.split(
+#         os.path.dirname(__file__)
+#     )[0],
+#     "jupyter",
+#     "P2_second_circuit_data_050922_to_210423.csv"
+# )
+
+

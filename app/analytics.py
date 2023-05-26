@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn import linear_model
 from scipy.signal import find_peaks, peak_widths
 
+__all__ = ["WaterTemperatures", "WaterFlowRates", "DissipatedHeat", "PumpsCurrents", "FansCurrents"]
 
 class Analytics(ABC):
     def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
@@ -55,6 +56,13 @@ class WaterFlowRates(Analytics):
     def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
         super().__init__(mean_deviation_lim)
 
+    def df_md_filter(self, df: pd.core.frame.DataFrame, 
+            col_name: Union[int, str]) -> Tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
+    
+        col_mean = df[col_name].mean()
+        df_true = df[np.absolute(1 - (df[col_name]/col_mean)) < self.mean_deviation_lim]
+        df_false = df[np.absolute(1 - (df[col_name]/col_mean)) > self.mean_deviation_lim]
+        return df_true, df_false
 
 class DissipatedHeat(Analytics):
     def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
@@ -72,6 +80,14 @@ class DissipatedHeat(Analytics):
 class PumpsCurrents(Analytics):
     def __init__(self, mean_deviation_lim: Union[float, int, None] = None) -> None:
         super().__init__(mean_deviation_lim)
+
+    def df_md_filter(self, df: pd.core.frame.DataFrame, 
+            col_name: Union[int, str]) -> Tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
+    
+        col_mean = df[col_name].mean()
+        df_true = df[np.absolute(1 - (df[col_name]/col_mean)) < self.mean_deviation_lim]
+        df_false = df[np.absolute(1 - (df[col_name]/col_mean)) > self.mean_deviation_lim]
+        return df_true, df_false
 
 
 class FansCurrents(Analytics):
