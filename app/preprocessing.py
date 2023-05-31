@@ -16,6 +16,29 @@ class CsvRefactorer:
     * <ID, Time, Value, Quality> to more readable style with columns 
     * < Time ID1 val ID2 val ... IDn val >
     """
+    IDS_MAP = {
+            299: "T1aHE",
+            309: "P2",
+            315: "T1bHE",
+            317: "T2bHE",
+            319: "T2aHE",
+            321: "Treactor",
+            325: "T2aHE1",
+            327: "Tair",
+            381: "CTF1",
+            395: "CTF2",
+            396: "CTF3",
+            460: "T2aHE2",
+            461: "T2aHE3",
+            462: "T2aHE4",
+            463: "T2aHE5",
+            481: "Q2",
+            406: "p21",
+            407: "p22",
+            408: "p23",
+            409: "p24",
+        }
+
     def __init__(self, df: pd.core.frame.DataFrame, quickclean: bool = True, 
             index_range: Union[Tuple[str, str],
                          Tuple[np.datetime64,np.datetime64], 
@@ -54,6 +77,10 @@ class CsvRefactorer:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], format='%Y-%m-%dT%H:%M')
         df = df.set_index('Timestamp')
         return df
+
+    def ids_mapping(self):
+
+        return ids_map
 
     def select_by_ids(
         self, 
@@ -211,7 +238,7 @@ class CsvRefactorer:
         for period in periods:
             s,f = period
             
-            selected_periods[f"{s} {f}"] = df.loc[s:f]
+            selected_periods[f"{s} {f}"] = df.loc[s:f].fillna(0.0)
             
             if dropna:
                 selected_periods[f"{s} {f}"] = selected_periods[f"{s} {f}"].dropna()

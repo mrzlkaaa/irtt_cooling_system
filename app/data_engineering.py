@@ -3,6 +3,7 @@ from calendar import leapdays
 import pandas as pd
 import numpy as np
 import os
+import inspect
 from typing import Callable, Dict, List, Tuple, Union, Set
 from collections import defaultdict
 
@@ -100,8 +101,21 @@ class PeriodicDataPreprocess(DataPreprocess):
             #* ----------
             #* None
             '''
-            print(self)
-            cols = args[0]
+
+            try:
+                #* getting first element in agrs
+                #* if another string is passed
+                #* KeyError will trigger after checking the columns names
+                cols = args[0]
+            except IndexError:
+                cols = kwargs.get("column") if not kwargs.get("columns")\
+                    else kwargs.get("columns")
+                print(cols)
+                if cols is None:
+                    raise KeyError(
+                        "columns argument not given either as args or kwargs"
+                    )
+
             if not isinstance(cols, list):
                 cols = [cols]
             
@@ -117,6 +131,7 @@ class PeriodicDataPreprocess(DataPreprocess):
         return wrapper
         
 
+    #! move to FE
     @selection_validator
     def conditional_rows_drop(
         self,
@@ -126,7 +141,7 @@ class PeriodicDataPreprocess(DataPreprocess):
         # fillna: float | int | str = 0.0, #todo add
         # period = None
 
-    ) -> None:
+    ) -> Dict[pd.core.framew.DataFrame]:
         '''
         #* the method drops rows where condition is true
         #* for all columns provided to cols variable
@@ -142,10 +157,10 @@ class PeriodicDataPreprocess(DataPreprocess):
         # if period is not None:
 
         
-        for i, v in self.period_items:
+        for i in self.period_keys:
             to_drop = np.array([])
-            v.loc[:, columns] = v.loc[:, columns].fillna(0.0)
-            to_filter = v.loc[:, columns]
+            self.period[i].loc[:, columns] = self.period[i].loc[:, columns].fillna(0.0)
+            to_filter = self.period[i].loc[:, columns]
 
             rows = (i for i in to_filter.index)
             for k in rows:
@@ -156,14 +171,15 @@ class PeriodicDataPreprocess(DataPreprocess):
                     to_drop = np.append(to_drop, k)
                     # print(res, "row to drop", k)
 
-            self.period[i] = v.drop(index=to_drop)
+            self.period[i] = self.period[i].drop(index=to_drop)
         return self.period
 
+    #! move to FE
     @selection_validator
     def pumps_mapping(
         self,
         columns: List[str] = ["p21", "p22", "p23", "p24"],
-        drop_pumps: bool = True
+        drop_pumps: bool = False
     ) -> None:
         '''
         #* To maintain reactor under normal condition
@@ -184,9 +200,9 @@ class PeriodicDataPreprocess(DataPreprocess):
         #* modified dict
         '''
         
-        for i, v in self.period_items:
+        for i in self.period_keys:
 
-            cols = v.loc[:, columns]
+            cols = self.period[i].loc[:, columns]
             #* getting mean of each column
             cols_mean = cols.fillna(0.0).mean(axis=0)
 
@@ -206,21 +222,23 @@ class PeriodicDataPreprocess(DataPreprocess):
             ).values
 
             if drop_pumps:
-                self.period[i] = v.drop(columns, axis=1)
+                self.period[i] = self.period[i].drop(columns, axis=1)
+            
         return self.period
 
     @selection_validator
     def filter_by_deviation(
         self, 
         column: str | float | int, 
-        value: float | int
+        value: float | int = 0.1
     ) -> None:
         
-        for i, v in self.period_items:
-            col_mean = v[column].mean()
+        for i in self.period_keys:
+            # print(i)
+            col_mean = self.period[i][column][self.period[i][column] > 0].mean()
 
-            self.period[i] = v[np.absolute(1 - v[column]/col_mean) <= value]
-        
+            self.period[i] = self.period[i][np.absolute(1 - self.period[i][column]/col_mean) <= value]
+            
         return self.period
 
     def to_dataframe(self):
@@ -242,7 +260,18 @@ class FeatureEngineering:
         self,
         df: pd.core.frame.DataFrame,
     ):
-        self.df = df.fillna(0.0)
+        self._df = df.fillna(0.0)
+
+    @property
+    def df(self) -> pd.core.frame.DataFrame:
+        return self._df
+
+    @df.setter
+    def df(
+        self, 
+        val: pd.core.frame.DataFrame
+    ) -> None:
+        self._df = val
 
     def selection_validator(func: Callable):
         '''
@@ -274,7 +303,20 @@ class FeatureEngineering:
             #* ----------
             #* function result
             '''
-            cols = args[0]
+            try:
+                #* getting first element in agrs
+                #* if another string is passed
+                #* KeyError will trigger after checking the columns names
+                cols = args[0]
+            except IndexError:
+                cols = kwargs.get("column") if not kwargs.get("columns")\
+                    else kwargs.get("columns")
+                print(cols)
+                if cols is None:
+                    raise KeyError(
+                        "columns argument not given either as args or kwargs"
+                    )
+
             if not isinstance(cols, list):
                 cols = [cols]
             
@@ -324,7 +366,7 @@ class FeatureEngineering:
         bycolumn: bool = False,
         column_name: str | None = "Timestamp",
         time_periods: List[Tuple[str, str]] | None = None,
-        unit: str = "hour",
+        unit: str = "hour",  #* under dev
         feature_name: str = "new"
 
     ):
@@ -361,7 +403,7 @@ class FeatureEngineering:
         #* ----------
         #*
         '''
-        self.df = self.df.loc["2022-10-17":"2022-11-18", :]
+        # self.df = self.df.loc["2022-10-17":"2022-11-18", :]
 
         if byindex and bycolumn:
             raise ValueError(
@@ -373,51 +415,41 @@ class FeatureEngineering:
                 f"column_name is None"
             )
 
+        tot_time = 0.0
+        length = len(self.df)
+
         if time_periods:
             #! needs only to get the correct timedelta value -> hours
-            length = 0
-            tot_time = 0.0
+            #! but computated hours will be devided by a total length of df
+
+            #todo all data before and after first and last dates drops
+            
+
             # self.df[feature_name] = 
             for i in time_periods:
-                st, fn = i
+                st, fn = i  #* unpacking of dates tuple
                 period = self.df.loc[st: fn, :]
-                length += len(period)
+                # length += len(period)
                 tot_time_diff = pd.to_datetime(period.index[-1]) - pd.to_datetime(period.index[0])
                 tot_time += self.get_hours(tot_time_diff)
-
-            feature = np.arange(
-                start+tot_time/length,
-                tot_time + tot_time/length,
-                tot_time/length
-            )
-            
-            st, fn = time_periods[0][0], time_periods[-1][1]
-
-            self.df[feature_name] = np.zeros(len(self.df))
-            self.df[feature_name].loc[st:fn, :] = pd.Series(feature).values
         
         else:
-            tot_time: float = 0.0
-            length = len(self.df)
-            tot_time_diff = pd.to_datetime(self.df.index[-1]) - pd.to_datetime(self.df.index[0])
-            tot_time = tot_time_diff.days*24 + tot_time_diff.seconds/3600
 
             tot_time_diff = pd.to_datetime(self.df.index[-1]) - pd.to_datetime(self.df.index[0])
             tot_time = self.get_hours(tot_time_diff)
 
-            feature = np.arange(
-                start+tot_time/length,
-                tot_time + tot_time/length,
-                tot_time/length
-            )
+        feature = np.arange(
+            start+tot_time/length,
+            tot_time + tot_time/length,
+            tot_time/length
+        )
 
-       
+        #* create a new feature and add it to df
+        self.df[feature_name] = pd.Series(feature).values
 
+        # print(tot_time, feature, feature.shape, length)
 
-        print(tot_time, feature, feature.shape, length)
-        print(self.df)
-
-        return
+        return self.df
 
     def make_dt2_feature(self):
         # todo decorator - validator requires
@@ -457,7 +489,7 @@ class FeatureEngineering:
 
     def pumps_normalizer(
         self,
-        column_name: str
+        column: str
     ):
         '''
         #* Normalize <column_name> column
@@ -471,18 +503,39 @@ class FeatureEngineering:
         #* ----------
         #* normalized copy of column
         '''
+        
+        self.df[column] = np.where(
+            self.df["pumps2"] == "124",
+            self.df[column]*1.02,
+            np.where(
+                self.df["pumps2"] == "123",
+                self.df[column]*1.03,
+                self.df[column]
+            )
+            
+        )
+        return self.df
 
-        return
+    def make_QbyIP(self):
+        self.df["QbyIP"] = self.df["Q2"]/(self.df["P2"]*self.df["I2mean"])
+       
+        return self.df
 
-    def make_QbyIP(self, dtnorm: bool = True):
-        return
-
-    def make_QbyI(self,  dtnorm: bool = True):
-        return
+    def make_QbyI(self):
+        self.df["QbyIP"] = self.df["Q2"]/(self.df["P2"]*self.df["I2mean"])
+        return self.df
 
     def make_dts_on_HEs(self, inplace=True):
+        self.df = self.df.loc[
+            :, 
+            ["T2aHE1", "T2aHE2", "T2aHE3", "T2aHE4", "T2aHE5"]
+        ].apply(lambda x: x - self.df["T2bHE"])
+        return self.df
+
+    def make_heat_dissipation(self):
         return
 
+    #todo make it for inside uses only
     def get_hours(self, timedelta):
         days = timedelta.days
         seconds = timedelta.seconds
