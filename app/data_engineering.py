@@ -1,31 +1,45 @@
 from __future__ import annotations
 from calendar import leapdays
+import re
+from xml.etree.ElementInclude import include
 import pandas as pd
 import numpy as np
-import os
-import inspect
+from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Tuple, Union, Set
 from collections import defaultdict
 
 
-class DataPreprocess:
+class DataPreprocess(ABC):
+    PUMPS_MAP = {
+        "p21": "1",
+        "p22": "2",
+        "p23": "3",
+        "p24": "4",
+    }
+
+    PUMPS_COEF = {
+        "123": 1.03,
+        "124": 1.02,
+        "234": 1
+    }
+    
     def __init__(self):
         return
 
-    def trigonometric_transform(self, series, period):
-        return
+    @abstractmethod
+    def conditional_rows_drop(self):
+        raise NotImplementedError
 
-    def column_transform(self):
-        """
-        #* flexible method to do column transformation
-        """
-        return
-
+    @abstractmethod
+    def filter_by_deviation(self):
+        raise NotImplementedError
 
     @staticmethod
     def retrieve_datatime(
-        series: pd.core.frame.Series, 
-        attr: str
+        series: pd.core.frame.Series,
+        attr: str,
+        byindex: bool = True,
+        
     ) -> Union[pd.core.frame.Series, None]:
         #! does not work if pass DateTime as index column
         """
@@ -38,12 +52,6 @@ class DataPreprocess:
 
 
 class PeriodicDataPreprocess(DataPreprocess):
-    PUMPS_MAP = {
-        "p21": "1",
-        "p22": "2",
-        "p23": "3",
-        "p24": "4",
-    }
 
     def __init__(
         self, 
@@ -51,10 +59,9 @@ class PeriodicDataPreprocess(DataPreprocess):
     ) -> None:
 
         super().__init__()
-        self._period = period
+        self._period = self._nan_handler(period)
         self.period_items = (i for i in self.period.items())
         self._period_keys = self.period.keys()
-
 
         
     @property
@@ -70,6 +77,27 @@ class PeriodicDataPreprocess(DataPreprocess):
         self._period = val
         self._period_keys = val.keys()
 
+    def _nan_handler(
+        self, 
+        period: Dict[pd.core.frame.DataFrame]
+    ) -> Dict[pd.core.frame.DataFrame]:
+        '''
+        #* dictionary grouped by time period may
+        #* include many rows with NaN values due to
+        #* grouping by small periods like minutes (secs and etc.) 
+        #* Parameters
+        #* ----------
+        #* period: Dict[pd.core.frame.DataFrame]
+        #* Returns
+        #* ----------
+        #* filtered dict - NaN cols/rows filled 
+        #* by zeros for each df
+        '''
+        
+        for i in period.keys():
+            period[i] = period[i].fillna(0.0) 
+
+        return period
 
     def selection_validator(func: Callable):
         '''
@@ -131,7 +159,6 @@ class PeriodicDataPreprocess(DataPreprocess):
         return wrapper
         
 
-    #! move to FE
     @selection_validator
     def conditional_rows_drop(
         self,
@@ -174,7 +201,6 @@ class PeriodicDataPreprocess(DataPreprocess):
             self.period[i] = self.period[i].drop(index=to_drop)
         return self.period
 
-    #! move to FE
     @selection_validator
     def pumps_mapping(
         self,
@@ -207,7 +233,7 @@ class PeriodicDataPreprocess(DataPreprocess):
             cols_mean = cols.fillna(0.0).mean(axis=0)
 
             #* PumpsUnderOpereration
-            puo_ind = cols_mean[cols_mean > 100].index
+            puo_ind = cols_mean[cols_mean > 80].index
 
             puo = "".join(
                 [self.PUMPS_MAP.get(i) for i in puo_ind]
@@ -230,12 +256,17 @@ class PeriodicDataPreprocess(DataPreprocess):
     def filter_by_deviation(
         self, 
         column: str | float | int, 
-        value: float | int = 0.1
+        value: float | int = 0.1,
+        include_zeros: bool = False
     ) -> None:
         
         for i in self.period_keys:
             # print(i)
-            col_mean = self.period[i][column][self.period[i][column] > 0].mean()
+            #* include zeros in column mean
+            if include_zeros:
+                col_mean = self.period[i].loc[:, column].mean()
+            else:
+                col_mean = self.period[i].loc[:, column][self.period[i].loc[:, column] > 0].mean()
 
             self.period[i] = self.period[i][np.absolute(1 - self.period[i][column]/col_mean) <= value]
             
@@ -249,18 +280,18 @@ class FeatureSelection:
     def __init__(self):
         return
 
-class FeatureEngineering:
-    PUMPS_COEF = {
-        "123": 1.03,
-        "124": 1.02,
-        "234": 1
-    }
+class FeatureEngineering(DataPreprocess):
 
     def __init__(
         self,
         df: pd.core.frame.DataFrame,
+        default_features: bool = True
     ):
+        super().__init__()
         self._df = df.fillna(0.0)
+
+        if default_features:
+            self._make_default_features()
 
     @property
     def df(self) -> pd.core.frame.DataFrame:
@@ -272,6 +303,11 @@ class FeatureEngineering:
         val: pd.core.frame.DataFrame
     ) -> None:
         self._df = val
+
+    def _make_default_features(self) -> None:
+        self.df["dt1"] = self.df["T1bHE"] - self.df["T1aHE"]
+        self.df["dt2"] = self.df["T2aHE"] - self.df["T2bHE"]
+        self.df["dt_circuits_coef"] = self.df["T1bHE"]/self.df["T2bHE"]
 
     def selection_validator(func: Callable):
         '''
@@ -329,6 +365,63 @@ class FeatureEngineering:
         
             return func(self, *args, **kwargs)
         return wrapper
+
+    @selection_validator
+    def filter_by_deviation(
+        self, 
+        column: str | float | int, 
+        value: float | int = 0.1,
+        include_zeros: bool = False
+    ) -> None:
+        
+        # print(i)
+        #* include zeros in column mean
+        if include_zeros:
+            col_mean = self.df.loc[:, column].mean()
+        else:
+            col_mean = self.df.loc[:, column][self.df.loc[:, column] > 0].mean()
+
+        self.df = self.df[np.absolute(1 - self.df.loc[:, column]/col_mean) <= value]
+            
+        return self.df
+
+    @selection_validator
+    def conditional_rows_drop(
+        self,
+        columns: list,
+        condition: str,
+        value: int | float,
+        # fillna: float | int | str = 0.0, #todo add
+        # period = None
+
+    ) -> pd.core.framew.DataFrame:
+        '''
+        #* the method drops rows where condition is true
+        #* for all columns provided to cols variable
+        #* Parameters
+        #* ----------
+        #* cols: str | list
+        #*  columns to apply conditions on
+        #* Returns
+        #* ----------
+        #* None
+        '''
+        
+        to_drop = np.array([])
+        to_filter = self.df.loc[:, columns]
+        rows = (i for i in to_filter.index)
+
+        for k in rows:
+            row = to_filter.loc[k, :]
+            method = getattr(type(row), condition)
+            res = method(row, value).values
+            if not False in res:
+                to_drop = np.append(to_drop, k)
+                # print(res, "row to drop", k)
+        self.df = self.df.drop(index=to_drop)
+
+        return self.df
+
 
     @selection_validator
     def columns_averaging(
@@ -424,34 +517,46 @@ class FeatureEngineering:
 
             #todo all data before and after first and last dates drops
             
+            self.df[feature_name] = np.zeros(length)
 
             # self.df[feature_name] = 
             for i in time_periods:
                 st, fn = i  #* unpacking of dates tuple
-                period = self.df.loc[st: fn, :]
-                # length += len(period)
+                period = self.df.loc[st: fn, feature_name]
+
+                length = len(period)
+                
                 tot_time_diff = pd.to_datetime(period.index[-1]) - pd.to_datetime(period.index[0])
-                tot_time += self.get_hours(tot_time_diff)
+                tot_time = self.get_hours(tot_time_diff)
+
+                feature = np.arange(
+                    start + tot_time/length,
+                    start + tot_time + tot_time/length,
+                    tot_time/length
+                )
+
+                self.df.loc[st: fn, feature_name] = pd.Series(feature).values
         
         else:
 
             tot_time_diff = pd.to_datetime(self.df.index[-1]) - pd.to_datetime(self.df.index[0])
             tot_time = self.get_hours(tot_time_diff)
 
-        feature = np.arange(
-            start+tot_time/length,
-            tot_time + tot_time/length,
-            tot_time/length
-        )
+            feature = np.arange(
+                start + tot_time/length,
+                start + tot_time + tot_time/length,
+                tot_time/length
+            )
 
-        #* create a new feature and add it to df
-        self.df[feature_name] = pd.Series(feature).values
+            #* create a new feature and add it to df
+            self.df[feature_name] = pd.Series(feature).values
 
         # print(tot_time, feature, feature.shape, length)
 
         return self.df
 
-    def make_dt2_feature(self):
+    #todo make default_fe
+    def make_dt2(self):
         # todo decorator - validator requires
         '''
         #* This is built-in method to get
@@ -469,7 +574,9 @@ class FeatureEngineering:
         
         return self.df["T2aHE"] - self.df["T2bHE"]
 
-    def make_dt1_feature(self):
+   
+    #todo make default_fe
+    def make_dt1(self):
         # todo decorator validator requires
         '''
         #* This is built-in method to get
@@ -503,14 +610,16 @@ class FeatureEngineering:
         #* ----------
         #* normalized copy of column
         '''
-        
-        self.df[column] = np.where(
-            self.df["pumps2"] == "124",
-            self.df[column]*1.02,
+        #todo make pumps2 default name and changeble
+
+
+        self.df.loc[:, column] = np.where(
+            self.df.loc[:, "pumps2"] == "124",
+            self.df.loc[:, column]*1.02,
             np.where(
-                self.df["pumps2"] == "123",
-                self.df[column]*1.03,
-                self.df[column]
+                self.df.loc[:, "pumps2"] == "123",
+                self.df.loc[:, column]*1.03,
+                self.df.loc[:, column]
             )
             
         )
@@ -525,15 +634,73 @@ class FeatureEngineering:
         self.df["QbyIP"] = self.df["Q2"]/(self.df["P2"]*self.df["I2mean"])
         return self.df
 
-    def make_dts_on_HEs(self, inplace=True):
-        self.df = self.df.loc[
-            :, 
-            ["T2aHE1", "T2aHE2", "T2aHE3", "T2aHE4", "T2aHE5"]
-        ].apply(lambda x: x - self.df["T2bHE"])
+    def make_dts_on_HEs(
+        self, 
+        inplace=True, 
+        dt_norm: bool=True
+    ) -> pd.core.dataframe.DataFrame:
+        '''
+        #* computation of dt on each HE
+        #* if inplace set to True replace
+        #* existing values by dt
+        #* if inplace set to False creates new features
+        #* Parameters
+        #* ----------
+        #* inplace: bool
+        #*  var to make or not inplace replacement
+        #* Returns
+        #* ----------
+        #* df
+        '''
+
+        #* default names of columns
+        he_temps = ["T2aHE1", "T2aHE2", "T2aHE3", "T2aHE4", "T2aHE5"]
+
+        dts = self.df.loc[
+                :, 
+                he_temps
+            ].apply(lambda x: x - self.df["T2bHE"])
+
+        if not inplace:
+            #* new features 
+            he_temps = np.array(list(map(lambda x: f"d{x}", he_temps)))
+
+        if dt_norm:
+            dts = dts.apply(lambda x: x / self.df["dt_circuits_coef"])
+
+        self.df.loc[:, he_temps] = dts
+        
         return self.df
 
-    def make_heat_dissipation(self):
-        return
+    def make_heat_dissipation(
+        self, 
+        dt_norm: bool = True
+    ) -> pd.core.dataframe.DataFrame:
+        '''
+        #* It's like heat_dissipation computation
+        #* but the aim is to show relation between
+        #* Q - wfr and dt
+        #* However, in practice dt between hot water of 1st circuit
+        #* and cold water of 2nd circuit must be taken into account
+        #* because as higher difference between this two as higher dt on HE
+        #* this is effect of temparature gradient between two circuits
+        #* Parameters
+        #* ----------
+        #*
+        #* Raises
+        #* ----------
+        #*
+        #* Returns
+        #* ----------
+        #*
+        '''
+        self.df["Ndis"] = self.df["QbyIP"]*self.df["dt2"]/self.df["dt_circuits_coef"]
+
+        if not dt_norm:
+            self.df["Ndis"] = self.df["QbyIP"]*self.df["dt2"]
+
+
+        return self.df
 
     #todo make it for inside uses only
     def get_hours(self, timedelta):

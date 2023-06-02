@@ -61,7 +61,7 @@ def test_to_dataframe(PDP):
     assert type(PDP.period) != type(df)
     
 
-
+row = "2022-12-01 23:40:00"
 
 @pytest.fixture
 def FE():
@@ -76,11 +76,13 @@ def test_columns_averaging(FE):
     assert 0
 
 def test_make_time_onpower_feature(FE):
-    periods = [
-        ("2022-10-17","2022-10-21"), 
-        ("2022-11-08","2022-11-11"), ("2022-11-15","2022-11-18")
-    ]
-    df = FE.make_time_onpower_feature(time_periods=None)
+    # periods = [
+    #     ("2022-10-17","2022-10-21"), 
+    #     ("2022-11-08","2022-11-11"), ("2022-11-15","2022-11-18")
+    # ]
+    periods = [( "2020-09-05", "2023-04-15")]
+
+    df = FE.make_time_onpower_feature(start=2000, time_periods=periods)
     print(df)
     assert 0
 
@@ -91,12 +93,18 @@ def test_pumps_normalizer(FE, PDP):
     # print(FE.df)
     df_before = FE.df.copy()
     df_after = FE.pumps_normalizer("Q2")
-    row = "2022-12-01 23:40:00"
+    
 
     assert df_after.loc[row, ["Q2"]].to_numpy() > df_before.loc[row, ["Q2"]].to_numpy()
 
 def test_make_dts_on_HEs(FE):
     df_before = FE.df.copy()
-    df_after = FE.make_dts_on_HEs()
+    df_after = FE.make_dts_on_HEs(inplace=True)
 
-    # assert df_before["T2aHE1"](df_after["T2aHE1"])
+    assert df_before.loc[row, ["T2aHE1"]].to_numpy() > df_after.loc[row, ["T2aHE1"]].to_numpy()
+
+def test_conditional_rows_drop_fe(FE):
+    FE.conditional_rows_drop(pumps, "eq", 0.0)
+
+    with pytest.raises(KeyError):
+        FE.df.loc["2022-11-15 09:30:00", pumps]

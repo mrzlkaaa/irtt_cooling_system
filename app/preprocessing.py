@@ -39,10 +39,15 @@ class CsvRefactorer:
             409: "p24",
         }
 
-    def __init__(self, df: pd.core.frame.DataFrame, quickclean: bool = True, 
-            index_range: Union[Tuple[str, str],
-                         Tuple[np.datetime64,np.datetime64], 
-                         None] = None) -> None:
+    def __init__(self, 
+        df: pd.core.frame.DataFrame, 
+        quickclean: bool = True, 
+        index_range: Union[
+            Tuple[str, str],
+            Tuple[np.datetime64,np.datetime64], 
+            None
+        ] = None
+    ) -> None:
         """
         *index_range can be applied only if quick_clean is set to True
         """
@@ -80,7 +85,7 @@ class CsvRefactorer:
 
     def ids_mapping(self):
 
-        return ids_map
+        return self.IDS_MAP
 
     def select_by_ids(
         self, 
