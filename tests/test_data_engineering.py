@@ -1,3 +1,4 @@
+from ast import operator
 from app.data_engineering import FeatureEngineering
 import pytest
 import pandas as pd
@@ -49,7 +50,15 @@ def test_pumps_mapping(PDP):
 
 def test_filter_by_deviation(PDP):
     print(PDP.period["2022-11-15 2022-11-18"].shape)
-    PDP.filter_by_deviation(column="Q2", value=0.05)
+    PDP.filter_by_deviation(column="Q2", bysigma=2)
+    # PDP.filter_by_deviation("Q2", 0.1)
+    print(PDP.period["2022-11-15 2022-11-18"].shape)
+
+    assert 0
+
+def test_filter_by_zscore(PDP):
+    print(PDP.period["2022-11-15 2022-11-18"].shape)
+    PDP.filter_by_zscore(column="Q2", pvalue=0.90)
     # PDP.filter_by_deviation("Q2", 0.1)
     print(PDP.period["2022-11-15 2022-11-18"].shape)
 
@@ -58,8 +67,14 @@ def test_filter_by_deviation(PDP):
 def test_to_dataframe(PDP):
     
     df = PDP.to_dataframe()
-    assert type(PDP.period) != type(df)
+    assert type(PDP.period) == type(df)
     
+def test_sma_smoothing(PDP):
+    df_before = PDP.period["2022-11-15 2022-11-18"].copy()
+    df_after = PDP.sma_smoothing(10)["2022-11-15 2022-11-18"].copy()
+    print(df_before, df_after)
+    assert df_after.shape < df_before.shape
+    assert 0
 
 row = "2022-12-01 23:40:00"
 
@@ -108,3 +123,15 @@ def test_conditional_rows_drop_fe(FE):
 
     with pytest.raises(KeyError):
         FE.df.loc["2022-11-15 09:30:00", pumps]
+
+def test_columns_categorizing(FE):
+    df = FE.columns_categorizing(
+        columns = ["CTF1", "CTF2", "CTF3"], 
+        value = 20,
+        i = 1,
+        e = 0,
+        operator = "gt"
+    )
+    print(df["CTF1"].describe())
+    assert 0
+

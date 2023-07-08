@@ -1,5 +1,6 @@
 from __future__ import annotations
 from calendar import leapdays
+from logging import critical
 import re
 from xml.etree.ElementInclude import include
 import pandas as pd
@@ -7,6 +8,9 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Tuple, Union, Set
 from collections import defaultdict
+from scipy import stats
+
+from app import *
 
 
 class DataPreprocess(ABC):
@@ -23,8 +27,21 @@ class DataPreprocess(ABC):
         "234": 1
     }
     
+    OPMV_MAP = {
+        "Q2": 400,
+        "dt1": 4.0,
+        "dt2": 4.0,
+        "Ipumps": 50.0
+    }
+
+    CRITICAL_VALUES = critical_values
+
     def __init__(self):
         return
+
+    @abstractmethod
+    def _make_default_features(self):
+        raise NotImplementedError
 
     @abstractmethod
     def conditional_rows_drop(self):
@@ -33,6 +50,13 @@ class DataPreprocess(ABC):
     @abstractmethod
     def filter_by_deviation(self):
         raise NotImplementedError
+
+    def _get_binary_operator(
+        self,
+        obj: object,
+        operator: str
+    ) -> Callable:
+        return getattr(type(obj), operator)
 
     @staticmethod
     def retrieve_datatime(
@@ -55,7 +79,8 @@ class PeriodicDataPreprocess(DataPreprocess):
 
     def __init__(
         self, 
-        period: Dict[pd.core.frame.DataFrame]
+        period: Dict[pd.core.frame.DataFrame],
+        default_features: bool = True
     ) -> None:
 
         super().__init__()
@@ -63,7 +88,14 @@ class PeriodicDataPreprocess(DataPreprocess):
         self.period_items = (i for i in self.period.items())
         self._period_keys = self.period.keys()
 
-        
+        if default_features:
+            self._make_default_features()
+
+    def _make_default_features(self) -> None:
+        for i in self.period_keys:
+            self.period[i]["dt1"] = self.period[i]["T1bHE"] - self.period[i]["T1aHE"]
+            self.period[i]["dt2"] = self.period[i]["T2aHE"] - self.period[i]["T2bHE"]
+
     @property
     def period(self) -> Dict[pd.core.frame.DataFrame]:
         return self._period
@@ -158,17 +190,54 @@ class PeriodicDataPreprocess(DataPreprocess):
             return func(self, *args, **kwargs)
         return wrapper
         
+    def sma_smoothing(
+        self,
+        num_points: int
+    ) -> Dict[str, pd.core.dataframe.DataFrame]:
+        '''
+        #* Method description
+        #* Parameters
+        #* ----------
+        #*
+        #* Raises
+        #* ----------
+        #*
+        #* Returns
+        #* ----------
+        #* copy of df
+        '''
+        st: int = 0
+        fn:int = num_points
+        for i in self.period_keys:
+            rows, cols = len(self.period[i]), len(self.period[i].columns)
+            arr = np.array([])
+
+            for n in range(len(self.period[i])):
+                #* select rows according to number of points to get sma and getting mean in each column
+                arr = np.append(arr, self.period[i].iloc[st + n : fn + n].mean(axis=0))
+            
+            #* reshape to 2D array
+            arr = arr.reshape(rows, cols) #[]
+            #* repcale previos values by creating new df
+            self.period[i] = pd.DataFrame(
+                data=arr,
+                index=self.period[i].index,
+                columns=self.period[i].columns)   
+            #* cut new df by num_points
+            self.period[i] = self.period[i].iloc[:-num_points] 
+            # print(arr, arr.shape, self.period[i].shape)
+        return self.period
 
     @selection_validator
     def conditional_rows_drop(
         self,
         columns: list,
-        condition: str,
+        operator: str,
         value: int | float,
         # fillna: float | int | str = 0.0, #todo add
         # period = None
 
-    ) -> Dict[pd.core.framew.DataFrame]:
+    ) -> Dict[str, pd.core.framew.DataFrame]:
         '''
         #* the method drops rows where condition is true
         #* for all columns provided to cols variable
@@ -192,7 +261,7 @@ class PeriodicDataPreprocess(DataPreprocess):
             rows = (i for i in to_filter.index)
             for k in rows:
                 row = to_filter.loc[k, :]
-                method = getattr(type(row), condition)
+                method = self._get_binary_operator(row, operator)
                 res = method(row, value).values
                 if not False in res:
                     to_drop = np.append(to_drop, k)
@@ -225,7 +294,8 @@ class PeriodicDataPreprocess(DataPreprocess):
         #* ----------
         #* modified dict
         '''
-        
+        opmv = self.OPMV_MAP.get("Ipumps")
+
         for i in self.period_keys:
 
             cols = self.period[i].loc[:, columns]
@@ -233,7 +303,7 @@ class PeriodicDataPreprocess(DataPreprocess):
             cols_mean = cols.fillna(0.0).mean(axis=0)
 
             #* PumpsUnderOpereration
-            puo_ind = cols_mean[cols_mean > 80].index
+            puo_ind = cols_mean[cols_mean > opmv].index
 
             puo = "".join(
                 [self.PUMPS_MAP.get(i) for i in puo_ind]
@@ -252,28 +322,109 @@ class PeriodicDataPreprocess(DataPreprocess):
             
         return self.period
 
+    #! create z-score test
     @selection_validator
     def filter_by_deviation(
         self, 
         column: str | float | int, 
-        value: float | int = 0.1,
-        include_zeros: bool = False
+        byvalue: float | int | None = None,
+        bysigma: int | None = None,  #* 2 sigma == 2 std.dev -> capture 95% of data
     ) -> None:
-        
-        for i in self.period_keys:
-            # print(i)
-            #* include zeros in column mean
-            if include_zeros:
-                col_mean = self.period[i].loc[:, column].mean()
-            else:
-                col_mean = self.period[i].loc[:, column][self.period[i].loc[:, column] > 0].mean()
+        '''
+        #* 
+        #* Parameters
+        #* ----------
+        #*
+        #* Raises
+        #* ----------
+        #*
+        #* Returns
+        #* ----------
+        #*
+        '''
+        if byvalue and bysigma:
+            raise ValueError(
+                f"Both byvalue: {byvalue} and bysigma: {bysigma} are given. Choose one"
+            )
 
-            self.period[i] = self.period[i][np.absolute(1 - self.period[i][column]/col_mean) <= value]
+        for i in self.period_keys:
+            
+            no_zeros = self.period[i].loc[:, column][self.period[i].loc[:, column] > 0]
+            no_zeros_mean = no_zeros.mean()
+
+            if byvalue:
+                lower, upper = no_zeros_mean - byvalue, no_zeros_mean + byvalue
+                
+            
+            elif bysigma:
+                std = np.std(no_zeros)
+                sigma = bysigma*std
+                lower, upper = no_zeros_mean - sigma, no_zeros_mean + sigma
+
+            # print(lower, no_zeros_mean, upper)
+            self.period[i] = self.period[i][
+                    (self.period[i][column] < upper)
+                    & (self.period[i][column] > lower)
+                ]
             
         return self.period
 
+
+    def filter_by_zscore(
+        self,
+        column: str | float | int,
+        pvalue: float = 0.95
+    ):
+        '''
+        #* Approach to detect and remove anomalies from dataset
+        #* assuming dataset alike normal distribution
+        #* zscores uses to standartize data by mean and stdev as follows:
+        #* Z = (x - mean) / stdev
+        #* the Z results can be interpret as:
+        #* how far values lies beyond the mean
+        #* to classify Z to normal / anomaly the are confidence intervals
+        #* Example: pvalue = 0.95 -> critical value is +-1.96, so
+        #* if Z-value beyond +-1.96 it's an anomaly
+        #* Parameters
+        #* ----------
+        #*
+        #* Raises
+        #* ----------
+        #*
+        #* Returns
+        #* ----------
+        #*
+        '''
+        
+
+        
+
+        lower, upper = self.CRITICAL_VALUES.get(pvalue)
+        opmv = self.OPMV_MAP.get(column)
+
+        for i in self.period_keys:
+            
+            #* OnPower Minimum Value
+            self.period[i] = self.period[i][self.period[i].loc[:, column] > opmv] 
+            standartized = pd.Series(
+                stats.zscore(self.period[i][column])
+            )
+            
+
+            normal_index = standartized[
+                (standartized < upper)
+                & (standartized > lower)
+            ].index
+
+            #* drops rows where the value beyond the critical value 
+            self.period[i] = self.period[i].loc[normal_index, :]
+            # self.period[i].index = 
+        return self.period
+
     def to_dataframe(self):
-        return pd.concat(self.period.values())
+        df = pd.concat(self.period.values())
+        df.index.name = "Timestamp"
+        return df
 
 
 class FeatureSelection:
@@ -281,6 +432,9 @@ class FeatureSelection:
         return
 
 class FeatureEngineering(DataPreprocess):
+    # OPERATORS_MAP = {
+
+    # }
 
     def __init__(
         self,
@@ -305,9 +459,17 @@ class FeatureEngineering(DataPreprocess):
         self._df = val
 
     def _make_default_features(self) -> None:
-        self.df["dt1"] = self.df["T1bHE"] - self.df["T1aHE"]
-        self.df["dt2"] = self.df["T2aHE"] - self.df["T2bHE"]
+        
         self.df["dt_circuits_coef"] = self.df["T1bHE"]/self.df["T2bHE"]
+        self.df["dt_circuits_coef_delta"] = np.absolute(self.df["T1bHE"] - self.df["T2bHE"])
+
+    # def _gt(self, series, val, i, e):
+    #     return np.where(
+    #         series > val,
+    #         i, #* if condition return true 
+    #         e  #* if condition return false 
+    #     )
+
 
     def selection_validator(func: Callable):
         '''
@@ -366,6 +528,56 @@ class FeatureEngineering(DataPreprocess):
             return func(self, *args, **kwargs)
         return wrapper
 
+    def columns_categorizing(
+        self,
+        columns: list,
+        value: float | int,
+        i: str | float | int,
+        e: str | float | int |  None = None, #! when none results are wrong
+        operator: str = "gt",
+    ):
+        '''
+        #* Categorizing 1/0 aka if/else by
+        #* conditional filtering
+        #* Parameters
+        #* ----------
+        #* columns: list
+        #*  columns to apply binary conditions on
+        #* value: float | int
+        #*  value uses in condition
+        #* i: str | float | int
+        #*  replaces row value of column 
+        #*  if condition is True
+        #* e: str | float | int
+        #*  replaces row value of column 
+        #*  if condition is False
+        #* operator: str
+        #*  binary operator to apply as a condition on data
+        #* Returns
+        #* ----------
+        #* copy of df
+        '''
+    
+        method = self._get_binary_operator(self.df.loc[:, columns[0]], operator)
+
+        for c in columns:
+            
+            if e is None:
+                # e = self.df[c]  #* inital value of column
+                self.df[c] = np.where(
+                    method(self.df[c], value),
+                    i,
+                    self.df[c]
+                )
+            else:
+                self.df[c] = np.where(
+                        method(self.df[c], value),
+                        i,
+                        e
+                    )
+
+        return self.df
+    
     @selection_validator
     def filter_by_deviation(
         self, 
@@ -373,6 +585,7 @@ class FeatureEngineering(DataPreprocess):
         value: float | int = 0.1,
         include_zeros: bool = False
     ) -> None:
+        
         
         # print(i)
         #* include zeros in column mean
@@ -386,10 +599,56 @@ class FeatureEngineering(DataPreprocess):
         return self.df
 
     @selection_validator
+    def filter_by_zscore(
+        self,
+        column: str | float | int,
+        pvalue: float = 0.95,
+        nan_policy="omit"
+    ):
+        '''
+        #* Approach to detect and remove anomalies from dataset
+        #* assuming dataset alike normal distribution
+        #* zscores uses to standartize data by mean and stdev as follows:
+        #* Z = (x - mean) / stdev
+        #* the Z results can be interpret as:
+        #* how far values lies beyond the mean
+        #* to classify Z to normal / anomaly the are confidence intervals
+        #* Example: pvalue = 0.95 -> critical value is +-1.96, so
+        #* if Z-value beyond +-1.96 it's an anomaly
+        #* Parameters
+        #* ----------
+        #*
+        #* Raises
+        #* ----------
+        #*
+        #* Returns
+        #* ----------
+        #*
+        '''
+
+        lower, upper = self.CRITICAL_VALUES.get(pvalue)
+        
+        standartized = pd.Series(
+            #todo sensetive to nan -> add decorator to inform
+            stats.zscore(self.df[column], nan_policy=nan_policy)
+        )
+        
+
+        normal_index = standartized[
+            (standartized < upper)
+            & (standartized > lower)
+        ].index
+
+        #* drops rows where the value beyond the critical value 
+        self.df = self.df.loc[normal_index, :]
+            # self.period[i].index = 
+        return self.df
+
+    @selection_validator
     def conditional_rows_drop(
         self,
         columns: list,
-        condition: str,
+        operator: str,
         value: int | float,
         # fillna: float | int | str = 0.0, #todo add
         # period = None
@@ -413,7 +672,7 @@ class FeatureEngineering(DataPreprocess):
 
         for k in rows:
             row = to_filter.loc[k, :]
-            method = getattr(type(row), condition)
+            method = self._get_binary_operator(row, operator)
             res = method(row, value).values
             if not False in res:
                 to_drop = np.append(to_drop, k)
@@ -637,7 +896,8 @@ class FeatureEngineering(DataPreprocess):
     def make_dts_on_HEs(
         self, 
         inplace=True, 
-        dt_norm: bool=True
+        norm_by_delta: bool | None = True,
+        norm_by_rel: bool | None = None
     ) -> pd.core.dataframe.DataFrame:
         '''
         #* computation of dt on each HE
@@ -653,6 +913,8 @@ class FeatureEngineering(DataPreprocess):
         #* df
         '''
 
+        #! add exception on norm_by_delta and norm_by_rel uses
+
         #* default names of columns
         he_temps = ["T2aHE1", "T2aHE2", "T2aHE3", "T2aHE4", "T2aHE5"]
 
@@ -665,15 +927,19 @@ class FeatureEngineering(DataPreprocess):
             #* new features 
             he_temps = np.array(list(map(lambda x: f"d{x}", he_temps)))
 
-        if dt_norm:
+        if norm_by_rel:
             dts = dts.apply(lambda x: x / self.df["dt_circuits_coef"])
+
+        if norm_by_delta:
+            dts = dts.apply(lambda x: x / self.df["dt_circuits_coef_delta"])
 
         self.df.loc[:, he_temps] = dts
         
         return self.df
 
     def make_heat_dissipation(
-        self, 
+        self,
+        feature_name: str ="Ndis",
         dt_norm: bool = True
     ) -> pd.core.dataframe.DataFrame:
         '''
@@ -694,10 +960,10 @@ class FeatureEngineering(DataPreprocess):
         #* ----------
         #*
         '''
-        self.df["Ndis"] = self.df["QbyIP"]*self.df["dt2"]/self.df["dt_circuits_coef"]
+        self.df[feature_name] = self.df["QbyIP"]*self.df["dt2"]/self.df["dt_circuits_coef"]
 
         if not dt_norm:
-            self.df["Ndis"] = self.df["QbyIP"]*self.df["dt2"]
+            self.df[feature_name] = self.df["QbyIP"]*self.df["dt2"]
 
 
         return self.df
