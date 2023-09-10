@@ -132,7 +132,8 @@ class DescriptiveStatistic(Statistics):
     #*
     #* Methods
     #* ----------
-    #*'''
+    #*
+    '''
     def __init__(self):
         return
     

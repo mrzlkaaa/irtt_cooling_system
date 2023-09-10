@@ -7,15 +7,34 @@ import pandas as pd
 import numpy as np
 import os
 
+import asyncio
+
 path = os.path.join(os.path.split(os.path.dirname(__file__))[0], "jupyter", "041022_to_231222.csv")
 
 #! rename to DfRefactorer
 class CsvRefactorer:
-    """ 
-    * Class purpose is to refactor input csv with given columns
-    * <ID, Time, Value, Quality> to more readable style with columns 
-    * < Time ID1 val ID2 val ... IDn val >
-    """
+    
+    '''
+   #* Class purpose is to refactor input csv with given columns
+   #* <ID, Time, Value, Quality> to more readable style with columns 
+   #* < Time ID1 val ID2 val ... IDn val >
+   #* The recommended order of methods use:
+   #* 1. select_by_ids:
+   #*   returns List[pd.core.frame.DataFrame]
+   #*   where number of dfs is equal of number of a given ids 
+   #* 2. min_frac_groupby (optional):
+   #*   group the data by a given time frequancy
+   #* 3. concat_dfs:
+   #*   concatenate dfs from previuos steps
+   #*   by columns (axis=1) so each ID becomes a column
+   #*   and each row assotiates with a particular time
+   #* Attributes
+   #* ----------
+   #*
+   #* Methods
+   #* ----------
+   #*
+   '''
     IDS_MAP = {
             299: "T1aHE",
             309: "P2",
@@ -318,3 +337,101 @@ class CsvRefactorer:
         df.to_csv("123.csv", index=True) #* given name is a test
 
 
+class ReactorControlSystem:
+    '''
+   #* The class is created to preprocess / parse
+   #* .txt daily archive files outputed from MIRTEST software
+   #* The general idea is to retrieve columns and merge files
+   #* to a single dataframe with common Timestamp index
+   #* Attributes
+   #* ----------
+   #*
+   #* Methods
+   #* ----------
+   #*
+   '''
+   #* build a path to jupyter folder
+    GENERAL_PATH = os.path.join(
+        os.path.split(
+            os.path.dirname(__file__)
+        )[0], 
+        "jupyter"
+    )
+    
+    def __init__(
+        self,
+        files: list,
+        columns: list | None = None,
+        path: str = ""
+    ):
+        self.path = os.path.join(self.GENERAL_PATH, path)  #* build path to files
+        self.files = files  #* order is important
+        self.columns = columns
+        return
+
+    async def retrieve_from_file(self, file):
+        '''
+        #* Read the file, split columns and convert
+        #* list to dataframe
+        #* Parameters
+        #* ----------
+        #*
+        #* Raises
+        #* ----------
+        #*
+        #* Returns
+        #* ----------
+        #*
+        '''
+
+        with open(
+            os.path.join(self.path, file + ".txt"), 
+            "r",
+            errors="ignore"
+        ) as f:
+            data = f.readlines()[14:]
+        
+        df  = pd.DataFrame(
+            list(map(lambda x: x.split(), data)),
+            columns=self.columns
+        )
+        return df
+
+    async def get_raw_data(self):
+        '''
+        #* Top async method to accelerate data
+        #* retrieving from files
+        #* The asyncio.gather is used to grab all independet instances
+        #* Returns
+        #* ----------
+        #* dfs: List[df]
+        '''
+        dfs = await asyncio.gather(
+            *[self.retrieve_from_file(i) for i in self.files]
+        )
+        return dfs
+
+
+    def merge_days(
+        self,
+        dfs: list,
+        st_datatime: str,
+        datetime_col: str = "Timestamp",
+        update_index: bool = True
+    ):
+        for i in range(len(dfs)):
+            dfs[i].loc[:, datetime_col] = dfs[i].loc[:, datetime_col]\
+                .apply(
+                    lambda x: pd.to_timedelta(x) + pd.to_datetime(st_datatime) if i == 0 
+                    else pd.to_timedelta(x) + dfs[i-1].iloc[-1][datetime_col]
+                )
+        df = pd.concat([*dfs], axis=0)
+
+        if update_index:
+            df = df.set_index(datetime_col)
+            df = df.astype("float64")
+        
+        return df
+
+
+    

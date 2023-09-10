@@ -1,8 +1,15 @@
 import pytest
 import pandas as pd
 import os
+import asyncio
 
-from preprocessing import path, CsvRefactorer, DataPreprocess, PeriodicDataPreprocess
+from preprocessing import (
+    path, 
+    CsvRefactorer, 
+    # DataPreprocess, 
+    # PeriodicDataPreprocess,
+    ReactorControlSystem
+)
 
 IDs = [481, 309, 317, 319]
 
@@ -81,3 +88,21 @@ def test_concat_dfs(Refactorer):
 # )
 
 
+@pytest.fixture
+def RCS():
+    return ReactorControlSystem(
+        path="control_operation_system_params",
+        files=["20221017", "20221018", "20221019", "20221020", "20221021"]
+    )
+
+@pytest.mark.asyncio
+async def test_get_raw_data(RCS):
+    await RCS.get_raw_data()
+    assert 0
+
+@pytest.mark.asyncio
+async def test_merge_days(RCS):
+    raw_dfs = await RCS.get_raw_data()
+    df = RCS.merge_days(raw_dfs, "2022-10-17 10:05:30", 0)
+    print(df)
+    assert 0

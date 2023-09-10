@@ -10,7 +10,12 @@ from typing import Callable, Dict, List, Tuple, Union, Set
 from collections import defaultdict
 from scipy import stats
 
-from app import *
+# from app import *
+critical_values = {
+        0.90: (-1.65, 1.65),
+        0.95: (-1.96, 1.96),
+        0.99: (-2.58, 2.58)
+    }
 
 
 class DataPreprocess(ABC):
@@ -294,31 +299,38 @@ class PeriodicDataPreprocess(DataPreprocess):
         #* ----------
         #* modified dict
         '''
+        #todo rewrite method to check rows sequentially
+        #todo it may helps to catch a moment of pumps replacing with each other
+
         opmv = self.OPMV_MAP.get("Ipumps")
+        
 
         for i in self.period_keys:
 
+            pumps_names = np.array([])
+            # self.period[i]["pumps2"] = np.zeros_like(len(self.period[i]))
+            
+            #* select columns
             cols = self.period[i].loc[:, columns]
-            #* getting mean of each column
-            cols_mean = cols.fillna(0.0).mean(axis=0)
+            
+            for j in range(len(cols)):
+                #* puo stands for PumpsUnderOpereration
+                puo_ind = cols.iloc[j][cols.iloc[j] > opmv].index
+                
+                if len(puo_ind) == 0:
+                    puo = np.nan
+                else:    
+                    puo = "".join(
+                        [self.PUMPS_MAP.get(k) for k in puo_ind]
+                    )
 
-            #* PumpsUnderOpereration
-            puo_ind = cols_mean[cols_mean > opmv].index
-
-            puo = "".join(
-                [self.PUMPS_MAP.get(i) for i in puo_ind]
-            )
-
-            #* modify df
-            self.period[i]["pumps2"] = pd.Series(
-                np.full(
-                    (len(cols), ),
-                    puo
-                )
-            ).values
-
-            if drop_pumps:
-                self.period[i] = self.period[i].drop(columns, axis=1)
+                pumps_names = np.append(pumps_names, puo)
+            
+            #* add and populate new feature
+            self.period[i]["pumps2"] = pd.Series(pumps_names).values
+        
+        if drop_pumps:
+            self.period[i] = self.period[i].drop(columns, axis=1)
             
         return self.period
 
@@ -598,6 +610,7 @@ class FeatureEngineering(DataPreprocess):
             
         return self.df
 
+    #todo add feature to filter multiple columns
     @selection_validator
     def filter_by_zscore(
         self,
@@ -785,7 +798,7 @@ class FeatureEngineering(DataPreprocess):
 
                 length = len(period)
                 
-                tot_time_diff = pd.to_datetime(period.index[-1]) - pd.to_datetime(period.index[0])
+                tot_time_diff = pd.to_datetime(fn) - pd.to_datetime(st)
                 tot_time = self.get_hours(tot_time_diff)
 
                 feature = np.arange(
@@ -793,8 +806,13 @@ class FeatureEngineering(DataPreprocess):
                     start + tot_time + tot_time/length,
                     tot_time/length
                 )
-
+                print(feature, len(feature), len(self.df.loc[st: fn, feature_name]))
+                if len(pd.Series(feature).values) > len(self.df.loc[st: fn, feature_name]):
+                    self.df.loc[st: fn, feature_name] = pd.Series(feature).values[: len(self.df.loc[st: fn, feature_name])]
+                    return self.df
+                
                 self.df.loc[st: fn, feature_name] = pd.Series(feature).values
+
         
         else:
 
