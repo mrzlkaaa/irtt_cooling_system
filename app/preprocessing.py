@@ -399,6 +399,7 @@ class ReactorControlSystem:
 
     async def get_raw_data(self):
         '''
+        #! add code to work with 2d array -> retirieving 2d structure 
         #* Top async method to accelerate data
         #* retrieving from files
         #* The asyncio.gather is used to grab all independet instances

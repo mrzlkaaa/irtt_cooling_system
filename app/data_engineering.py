@@ -726,7 +726,7 @@ class FeatureEngineering(DataPreprocess):
 
     def make_time_onpower_feature(
         self,
-        start: float | int = 0,
+        start: float | int | list = 0,
         byindex: bool = True,
         bycolumn: bool = False,
         column_name: str | None = "Timestamp",
@@ -745,8 +745,14 @@ class FeatureEngineering(DataPreprocess):
         #* different units (hour by default)
         #* Parameters
         #* ----------
-        #* start: float | int
+        #* start: float | int | list
         #*  the start value to increment to
+        #*  when list passed the method takes elements
+        #*  sequentially so this len(list) == len(time_periods)
+        #*  must be true
+        #*  in case when start value for period depends on previous
+        #*  period element of list can be set as "" (empty string)
+        #*  empty sting cannot be first element of a list
         #* byindex: bool
         #*  indicates that TimeStamp is index
         #* bycolumm: bool
@@ -790,9 +796,10 @@ class FeatureEngineering(DataPreprocess):
             #todo all data before and after first and last dates drops
             
             self.df[feature_name] = np.zeros(length)
+            # start_elem = 
 
             # self.df[feature_name] = 
-            for i in time_periods:
+            for num, i in enumerate(time_periods):
                 st, fn = i  #* unpacking of dates tuple
                 period = self.df.loc[st: fn, feature_name]
 
@@ -801,17 +808,29 @@ class FeatureEngineering(DataPreprocess):
                 tot_time_diff = pd.to_datetime(fn) - pd.to_datetime(st)
                 tot_time = self.get_hours(tot_time_diff)
 
+                #* check whether start is a list
+                if isinstance(start, list):
+                    start_elem = start[num]
+                    if start_elem == "" and num > 0:
+                        #* select last row from previous time period to model staying process
+                        start_elem = self.df.loc[time_periods[num-1][-1], feature_name][-1]
+                else:
+                    start_elem = start
+                # print(start_elem, type(start_elem))
+
                 feature = np.arange(
-                    start + tot_time/length,
-                    start + tot_time + tot_time/length,
+                    start_elem + tot_time/length,
+                    start_elem + tot_time + tot_time/length,
                     tot_time/length
                 )
+                
                 print(feature, len(feature), len(self.df.loc[st: fn, feature_name]))
+                
                 if len(pd.Series(feature).values) > len(self.df.loc[st: fn, feature_name]):
                     self.df.loc[st: fn, feature_name] = pd.Series(feature).values[: len(self.df.loc[st: fn, feature_name])]
-                    return self.df
-                
-                self.df.loc[st: fn, feature_name] = pd.Series(feature).values
+                    
+                else:
+                    self.df.loc[st: fn, feature_name] = pd.Series(feature).values
 
         
         else:

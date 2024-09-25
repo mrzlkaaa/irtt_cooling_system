@@ -9,7 +9,7 @@ from data_engineering import PeriodicDataPreprocess
 
 path_to = os.path.join(
     os.path.dirname(__file__),
-    "to_preprocessing_tests.csv"
+    "to_stats_tests.xlsx"
 )
 
 
@@ -18,7 +18,7 @@ pumps = ["p21", "p22", "p23", "p24"]
 @pytest.fixture
 def PDP():
     
-    df = pd.read_csv(path_to, index_col="Timestamp")
+    df = pd.read_excel(path_to, index_col="Timestamp")
     period = CsvRefactorer.select_time_period(
         df,
         [
@@ -81,7 +81,7 @@ row = "2022-12-01 23:40:00"
 @pytest.fixture
 def FE():
     
-    df = pd.read_csv(path_to, index_col="Timestamp")
+    df = pd.read_excel(path_to, index_col="Timestamp")
     return FeatureEngineering(df)
 
 def test_columns_averaging(FE):
@@ -91,13 +91,13 @@ def test_columns_averaging(FE):
     assert 0
 
 def test_make_time_onpower_feature(FE):
-    # periods = [
-    #     ("2022-10-17","2022-10-21"), 
-    #     ("2022-11-08","2022-11-11"), ("2022-11-15","2022-11-18")
-    # ]
-    periods = [( "2020-09-05", "2023-04-15")]
+    periods = [
+        ("2022-10-17","2022-10-21"), 
+        ("2022-11-08","2022-11-11"), ("2022-11-15","2022-11-18")
+    ]
+    # periods = [( "2020-09-05", "2023-04-15")]
 
-    df = FE.make_time_onpower_feature(start=2000, time_periods=periods)
+    df = FE.make_time_onpower_feature(start=[2000, "", ""], time_periods=periods)
     print(df)
     assert 0
 
